@@ -1,4 +1,6 @@
 # Forlorn 1.9c for Windows and Linux
+An emulated port of the arm32 unreleased iOS game Forlorn by Robtop to PC via Dynarmic
+
 *This project was written with AI, partially the reason why I made this open source*
 
 First things first, what is forlorn? Forlorn is an unreleased game by Robtop (creator of Geometry Dash) that was available through
