@@ -230,7 +230,7 @@ std::uint64_t symbol(const std::string &name) {
 }
 void addSymbol(const std::string &name, std::uint64_t address) {
     g_defined.emplace(name, address);
-    const auto plain = address & ~1ull;
+    const std::uint64_t plain = address & ~std::uint64_t(1);
     auto it = std::lower_bound(g_symbols.begin(), g_symbols.end(), std::make_pair(plain, std::string()));
     g_symbols.insert(it, {plain, name});
 }

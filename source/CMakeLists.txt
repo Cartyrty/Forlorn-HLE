@@ -7,6 +7,19 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# No build-machine paths in the binaries (they carry the user name): source file names in assert messages and
+# __FILE__ are made relative to the source folder (dynarmic and its externals included, so this comes first), and
+# the Windows exe names its PDB without a folder.
+if(MSVC)
+  file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/" SOURCE_PREFIX)
+  file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/" BINARY_PREFIX)
+  add_compile_options("/d1trimfile:${SOURCE_PREFIX}" "/d1trimfile:${BINARY_PREFIX}")
+else()
+  add_compile_options("-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}/=" "-ffile-prefix-map=${CMAKE_CURRENT_BINARY_DIR}/=")
+  # No RPATH either: it would record the library folders of the build machine (play_linux.sh sets the library path).
+  set(CMAKE_SKIP_RPATH ON)
+endif()
+
 # dynarmic: 32-bit ARM guest (armv7, ARM + Thumb-2), x86-64 host.
 set(DYNARMIC_TESTS OFF CACHE BOOL "" FORCE)
 set(DYNARMIC_FRONTENDS "A32" CACHE STRING "" FORCE)
@@ -44,7 +57,7 @@ target_compile_definitions(ForlornHLE PRIVATE _SILENCE_CXX20_U8PATH_DEPRECATION_
 
 if(MSVC)
   target_compile_options(ForlornHLE PRIVATE /utf-8 /W3 /permissive- /Zc:preprocessor /MP)
-  target_link_options(ForlornHLE PRIVATE /DEBUG)
+  target_link_options(ForlornHLE PRIVATE /DEBUG /PDBALTPATH:%_PDB%)
 else()
   target_compile_options(ForlornHLE PRIVATE -Wno-deprecated-declarations)
 endif()
