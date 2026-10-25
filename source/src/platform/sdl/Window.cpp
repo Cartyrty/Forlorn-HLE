@@ -15,6 +15,7 @@ SDL_Window *g_window = nullptr;
 SDL_GLContext g_context = nullptr;
 std::mutex g_shareLock;
 std::vector<SDL_GLContext> g_sharedPool;
+bool g_fullscreen = false;
 // The handlers are installed by other files' static initializers; as function-local statics they exist before first
 // use, whatever order the files are initialized in.
 std::function<void(int, double, double, int)> &touchHandler() { static std::function<void(int, double, double, int)> f; return f; }
@@ -23,6 +24,11 @@ std::function<void(int, bool)> &keyStateHandler() { static std::function<void(in
 std::function<void()> &closeHandler() { static std::function<void()> f; return f; }
 int g_mouseButton = -1; // the button holding the mouse touch (0 left, 1 right), -1 when none
 std::atomic<int> g_rotation{1};
+void toggleFullscreen() {
+    const Uint32 flags = g_fullscreen ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP;
+    if (SDL_SetWindowFullscreen(g_window, flags) != 0) fatal("SDL could not toggle fullscreen: %s", SDL_GetError());
+    g_fullscreen = !g_fullscreen;
+}
 
 // Window coordinates -> portrait points, undoing the display rotation.
 void toPoints(int wx, int wy, double &x, double &y) {
@@ -108,7 +114,7 @@ void setRotation(int quarterTurns) {
     quarterTurns &= 3;
     if (std::getenv("HLE_ROTATION") || quarterTurns == g_rotation) return;
     g_rotation = quarterTurns;
-    if (!g_window) return;
+    if (!g_window || g_fullscreen) return;
     int w, h;
     clientFor(quarterTurns, w, h);
     SDL_SetWindowSize(g_window, w, h);
@@ -156,6 +162,10 @@ void pumpEvents() {
         case SDL_KEYDOWN:
         case SDL_KEYUP: {
             const bool down = e.type == SDL_KEYDOWN;
+            if (e.key.keysym.sym == SDLK_F11) {
+                if (down && !e.key.repeat) toggleFullscreen();
+                break;
+            }
             if (const int key = keyCode(e.key.keysym.sym); key && !e.key.repeat && keyStateHandler()) keyStateHandler()(key, down);
             // Characters the text input events leave out (as WM_CHAR delivers them on Windows).
             if (down && keyHandler()) {

@@ -30,6 +30,7 @@ or below. This project cleanly emulates the IPA on PC, allowing users to play an
 - Up / W / Space   jump
 - X / J / Ctrl     attack
 - Esc / P / Tab    in-game menu (items, quit, restart)
+- F11              toggle fullscreen
 - Keys can be combined (run and jump at the same time). While typing your name, the keyboard
   goes to the name box: Enter to confirm, Backspace to delete.
 - Closing the window saves the game first, as a phone does when the app goes to the background.
