@@ -16,6 +16,8 @@ HDC g_dc = nullptr;
 HGLRC g_context = nullptr;
 std::mutex g_shareLock;
 std::vector<HGLRC> g_sharedPool;
+bool g_fullscreen = false;
+WINDOWPLACEMENT g_windowedPlacement{sizeof(WINDOWPLACEMENT)};
 // The handlers are installed by other files' static initializers; as function-local statics they exist before first
 // use, whatever order the files are initialized in.
 std::function<void(int, double, double, int)> &touchHandler() { static std::function<void(int, double, double, int)> f; return f; }
@@ -24,6 +26,7 @@ std::function<void(int, bool)> &keyStateHandler() { static std::function<void(in
 std::function<void()> &closeHandler() { static std::function<void()> f; return f; }
 int g_mouseButton = -1; // the button holding the mouse touch (0 left, 1 right), -1 when none
 std::atomic<int> g_rotation{1};
+void toggleFullscreen();
 
 // Window client coordinates -> portrait points, undoing the display rotation.
 void toPoints(LPARAM lp, double &x, double &y) {
@@ -64,6 +67,10 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_KEYDOWN:
     case WM_KEYUP:
+        if (wp == VK_F11) {
+            if (msg == WM_KEYDOWN && !(lp & (1 << 30))) toggleFullscreen();
+            return 0;
+        }
         // Key presses and releases (auto-repeat dropped), alongside WM_CHAR's typed characters.
         if (keyStateHandler() && !(msg == WM_KEYDOWN && (lp & (1 << 30)))) keyStateHandler()(int(wp), msg == WM_KEYDOWN);
         break;
@@ -91,6 +98,28 @@ void clientFor(int rotation, int &w, int &h) {
     h = int(ph * fit);
 }
 constexpr DWORD kStyle = WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX;
+void toggleFullscreen() {
+    if (!g_window) return;
+    if (!g_fullscreen) {
+        g_windowedPlacement.length = sizeof(g_windowedPlacement);
+        if (!GetWindowPlacement(g_window, &g_windowedPlacement)) fatal("Windows could not save the window placement");
+        MONITORINFO monitor{sizeof(monitor)};
+        const HMONITOR handle = MonitorFromWindow(g_window, MONITOR_DEFAULTTONEAREST);
+        if (!GetMonitorInfoW(handle, &monitor)) fatal("Windows could not get the fullscreen monitor bounds");
+        SetWindowLongPtrW(g_window, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+        if (!SetWindowPos(g_window, HWND_TOPMOST, monitor.rcMonitor.left, monitor.rcMonitor.top,
+                          monitor.rcMonitor.right - monitor.rcMonitor.left, monitor.rcMonitor.bottom - monitor.rcMonitor.top,
+                          SWP_FRAMECHANGED))
+            fatal("Windows could not enter fullscreen");
+        g_fullscreen = true;
+    } else {
+        SetWindowLongPtrW(g_window, GWL_STYLE, kStyle | WS_VISIBLE);
+        if (!SetWindowPos(g_window, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED) ||
+            !SetWindowPlacement(g_window, &g_windowedPlacement))
+            fatal("Windows could not restore the window from fullscreen");
+        g_fullscreen = false;
+    }
+}
 } // namespace
 
 void createWindow() {
@@ -109,6 +138,7 @@ void createWindow() {
     AdjustWindowRect(&r, kStyle, FALSE);
     g_window = CreateWindowW(L"ForlornHLE", L"Forlorn (HLE)", kStyle | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left,
                              r.bottom - r.top, nullptr, nullptr, wc.hInstance, nullptr);
+    if (!g_window) fatal("Windows could not create the window");
     g_dc = GetDC(g_window);
     PIXELFORMATDESCRIPTOR pfd{sizeof(pfd), 1, PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER, PFD_TYPE_RGBA, 32};
     pfd.cDepthBits = 24;
@@ -130,7 +160,7 @@ void setRotation(int quarterTurns) {
     quarterTurns &= 3;
     if (std::getenv("HLE_ROTATION") || quarterTurns == g_rotation) return;
     g_rotation = quarterTurns;
-    if (!g_window) return;
+    if (!g_window || g_fullscreen) return;
     int w, h;
     clientFor(quarterTurns, w, h);
     RECT r{0, 0, w, h};
